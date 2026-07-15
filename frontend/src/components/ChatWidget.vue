@@ -22,7 +22,7 @@ interface UiMessage extends ChatHistoryMessage {
 }
 
 const greeting = "서울에서 어디로 갈지 고민되시나요? Seoullo의 관광 데이터에서 장소를 찾아드릴게요.";
-const suggestions = ["종로구 관광지 추천", "서울 축제 장소 알려줘", "커뮤니티가 등록한 장소 찾아줘"];
+const suggestions = ["종로구 관광지 추천", "서울 축제 장소 알려줘", "서울 야경 명소 알려줘"];
 
 const isOpen = ref(false);
 const isSending = ref(false);
