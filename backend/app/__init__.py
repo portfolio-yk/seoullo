@@ -1,0 +1,2 @@
+"""Seoullo FastAPI application."""
+
