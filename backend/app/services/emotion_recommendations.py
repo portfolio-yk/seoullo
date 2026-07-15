@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from math import sqrt
 
 from sqlalchemy import select
@@ -32,36 +33,58 @@ def _profile_values(profile: PlaceEmotionProfile) -> dict[str, int]:
     return {column: int(getattr(profile, column)) for column in EMOTION_COLUMNS}
 
 
-def _pinecone_matches(settings: Settings, query_vector: list[float]) -> list[tuple[int, float]]:
+def _pinecone_matches(
+    settings: Settings,
+    query_vector: list[float],
+    *,
+    limit: int = 5,
+    metadata_filter: dict[str, object] | None = None,
+    minimum_results: int | None = None,
+) -> list[tuple[int, float]]:
     if not settings.pinecone_emotion_configured:
         raise RuntimeError("Pinecone 감정 인덱스가 설정되지 않았습니다.")
     from pinecone import Pinecone
 
     index = Pinecone(api_key=settings.pinecone_api_key).Index(settings.pinecone_emotion_index_name)
+    query_options: dict[str, object] = {
+        "namespace": settings.pinecone_emotion_namespace,
+        "vector": query_vector,
+        "top_k": limit,
+        "include_metadata": True,
+    }
+    if metadata_filter:
+        query_options["filter"] = metadata_filter
     response = index.query(
-        namespace=settings.pinecone_emotion_namespace,
-        vector=query_vector,
-        top_k=5,
-        include_metadata=True,
+        **query_options,
     )
     matches: list[tuple[int, float]] = []
     for match in response.matches:
         place_id = int(match.metadata.get("place_id", str(match.id).split(":")[-1]))
         matches.append((place_id, float(match.score)))
-    if len(matches) < 5:
-        raise RuntimeError("Pinecone 추천 결과가 5개 미만입니다.")
+    required = limit if minimum_results is None else minimum_results
+    if len(matches) < required:
+        raise RuntimeError(f"Pinecone 추천 결과가 {required}개 미만입니다.")
     return matches
 
 
-def _sqlite_matches(session: Session, query_vector: list[float]) -> list[tuple[int, float]]:
-    profiles = session.scalars(select(PlaceEmotionProfile)).all()
+def _sqlite_matches(
+    session: Session,
+    query_vector: list[float],
+    *,
+    limit: int = 5,
+    candidate_place_ids: Collection[int] | None = None,
+) -> list[tuple[int, float]]:
+    statement = select(PlaceEmotionProfile)
+    if candidate_place_ids is not None:
+        statement = statement.where(PlaceEmotionProfile.place_id.in_(candidate_place_ids))
+    profiles = session.scalars(statement).all()
     scored = [
         (profile.place_id, _cosine(query_vector, emotion_vector(_profile_values(profile))))
         for profile in profiles
         if any(_profile_values(profile).values())
     ]
     scored.sort(key=lambda item: (-item[1], item[0]))
-    return scored[:5]
+    return scored[:limit]
 
 
 def _matched_keywords(

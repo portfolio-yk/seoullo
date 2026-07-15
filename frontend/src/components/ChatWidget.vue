@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import {
   ChevronRight,
   LoaderCircle,
@@ -10,12 +10,14 @@ import {
   Trash2,
   X,
 } from "lucide-vue-next";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { errorMessage, mediaUrl, sendChatMessage } from "../api/client";
-import type { ChatHistoryMessage, ChatSource } from "../types/place";
+import type { ChatHistoryMessage, ChatRecommendation, ChatSource } from "../types/place";
 
 interface UiMessage extends ChatHistoryMessage {
   sources?: ChatSource[];
+  recommendations?: ChatRecommendation[];
+  fallback?: boolean;
   isGreeting?: boolean;
 }
 
@@ -28,6 +30,8 @@ const draft = ref("");
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const messageList = ref<HTMLElement | null>(null);
 const messages = ref<UiMessage[]>([{ role: "assistant", content: greeting, isGreeting: true }]);
+const route = useRoute();
+const hideLauncher = computed(() => ["place-create", "place-edit"].includes(String(route.name)));
 
 async function scrollToLatest() {
   await nextTick();
@@ -45,6 +49,10 @@ function clearChat() {
   draft.value = "";
 }
 
+function recommendationFor(message: UiMessage, placeId: number) {
+  return message.recommendations?.find((item) => item.id === placeId);
+}
+
 async function submit(value = draft.value) {
   const message = value.trim();
   if (!message || isSending.value) return;
@@ -60,7 +68,13 @@ async function submit(value = draft.value) {
 
   try {
     const response = await sendChatMessage(message, history);
-    messages.value.push({ role: "assistant", content: response.answer, sources: response.sources });
+    messages.value.push({
+      role: "assistant",
+      content: response.answer,
+      sources: response.sources,
+      recommendations: response.recommendations,
+      fallback: response.fallback,
+    });
   } catch (error) {
     messages.value.push({
       role: "assistant",
@@ -83,7 +97,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 <template>
   <button
-    v-if="!isOpen"
+    v-if="!isOpen && !hideLauncher"
     class="chat-launcher"
     type="button"
     aria-label="Seoullo 여행 챗봇 열기"
@@ -119,6 +133,7 @@ function handleKeydown(event: KeyboardEvent) {
           <div v-if="message.role === 'assistant'" class="chat-mini-mark"><Sparkles :size="13" /></div>
           <div class="chat-message-content">
             <p class="chat-bubble">{{ message.content }}</p>
+            <span v-if="message.fallback" class="chat-fallback-note">조건을 바꿔 다시 질문해 보세요</span>
             <div v-if="message.sources?.length" class="chat-sources">
               <span class="chat-source-label">답변에 사용한 장소</span>
               <RouterLink
@@ -134,6 +149,18 @@ function handleKeydown(event: KeyboardEvent) {
                   <small>{{ source.content_type }} · {{ source.source === 'dataset' ? '관광 데이터' : '커뮤니티' }}</small>
                   <strong>{{ source.title }}</strong>
                   <span><MapPin :size="11" /> {{ source.address || '주소 정보 없음' }}</span>
+                  <p v-if="recommendationFor(message, source.id)" class="chat-source-reason">
+                    {{ recommendationFor(message, source.id)?.reason }}
+                  </p>
+                  <div
+                    v-if="recommendationFor(message, source.id)?.emotion_categories.length"
+                    class="chat-emotion-tags"
+                  >
+                    <em
+                      v-for="keyword in recommendationFor(message, source.id)?.emotion_categories"
+                      :key="keyword"
+                    >{{ keyword }}</em>
+                  </div>
                 </div>
                 <ChevronRight :size="17" />
               </RouterLink>

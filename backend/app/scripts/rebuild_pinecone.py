@@ -5,7 +5,11 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services.seed import seed_dataset
-from app.services.vector_store import rebuild_emotion_index, rebuild_places_namespace
+from app.services.vector_store import (
+    rebuild_emotion_index,
+    rebuild_lexical_index,
+    rebuild_places_namespace,
+)
 
 
 def main() -> None:
@@ -17,7 +21,18 @@ def main() -> None:
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--emotion-only", action="store_true", help="16차원 감정 인덱스만 구축합니다.")
-    mode.add_argument("--places-only", action="store_true", help="장소 RAG 인덱스만 구축합니다.")
+    mode.add_argument(
+        "--lexical-only",
+        "--places-only",
+        dest="lexical_only",
+        action="store_true",
+        help="임베딩 없는 한국어 장소 lexical 인덱스만 구축합니다.",
+    )
+    mode.add_argument(
+        "--semantic-only",
+        action="store_true",
+        help="OpenAI 임베딩 기반 장소 semantic 인덱스만 구축합니다.",
+    )
     args = parser.parse_args()
     settings = get_settings()
 
@@ -29,7 +44,7 @@ def main() -> None:
             report = seed_dataset(session, settings.data_directory)
         print(json.dumps({"sqlite": report.to_dict()}, ensure_ascii=False, indent=2))
 
-    if not args.places_only:
+    if not args.lexical_only and not args.semantic_only:
         if report and (report.missing_emotion_items or report.invalid_emotion_items):
             raise SystemExit(
                 "감정 인덱스를 구축할 수 없습니다: "
@@ -38,9 +53,17 @@ def main() -> None:
         emotion_report = rebuild_emotion_index(settings)
         print(json.dumps({"emotion_index": emotion_report.to_dict()}, ensure_ascii=False, indent=2))
 
-    if not args.emotion_only:
+    if not args.emotion_only and not args.semantic_only:
+        lexical_report = rebuild_lexical_index(settings)
+        print(json.dumps({"lexical_index": lexical_report.to_dict()}, ensure_ascii=False, indent=2))
+
+    if args.semantic_only or (
+        not args.emotion_only
+        and not args.lexical_only
+        and settings.chat_semantic_search_enabled
+    ):
         upserted = rebuild_places_namespace(settings)
-        print(json.dumps({"place_rag_index": {"upserted": upserted}}, ensure_ascii=False, indent=2))
+        print(json.dumps({"semantic_index": {"upserted": upserted}}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

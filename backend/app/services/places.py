@@ -82,18 +82,57 @@ def parse_tags(raw_tags: str) -> list[str]:
     if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
         raise HTTPException(status_code=422, detail="tags는 문자열 배열 또는 쉼표 구분 문자열이어야 합니다.")
 
+    return normalize_tags(parsed)
+
+
+def normalize_tags(items: list[str]) -> list[str]:
     unique: dict[str, str] = {}
-    for item in parsed:
+    for item in items:
         display = " ".join(item.strip().lstrip("#").split())
         if not display:
             continue
         if len(display) > MAX_TAG_LENGTH:
-            raise HTTPException(status_code=422, detail=f"태그는 {MAX_TAG_LENGTH}자 이하여야 합니다.")
+            raise HTTPException(status_code=422, detail=f"태그는 {MAX_TAG_LENGTH}글자 이하여야 합니다.")
         unique.setdefault(display.casefold(), display)
 
     if len(unique) > MAX_TAGS_PER_PLACE:
         raise HTTPException(status_code=422, detail=f"태그는 최대 {MAX_TAGS_PER_PLACE}개까지 지정할 수 있습니다.")
     return list(unique.values())
+
+
+def add_place_tags(session: Session, place: Place, tag_names: list[str]) -> bool:
+    existing = {association.tag.normalized_name for association in place.place_tags}
+    incoming = [name for name in tag_names if name.casefold() not in existing]
+    if len(existing) + len(incoming) > MAX_TAGS_PER_PLACE:
+        raise HTTPException(status_code=422, detail=f"장소별 태그는 최대 {MAX_TAGS_PER_PLACE}개까지 지정할 수 있습니다.")
+
+    for name in incoming:
+        normalized = name.casefold()
+        tag = session.scalar(select(Tag).where(Tag.normalized_name == normalized))
+        if tag is None:
+            tag = Tag(name=name, normalized_name=normalized, usage_count=0)
+            session.add(tag)
+            session.flush()
+        tag.usage_count += 1
+        place.place_tags.append(PlaceTag(tag=tag))
+    return bool(incoming)
+
+
+def remove_place_tag(session: Session, place: Place, tag_name: str) -> bool:
+    normalized = tag_name.strip().lstrip("#").casefold()
+    association = next(
+        (
+            item
+            for item in place.place_tags
+            if item.tag.normalized_name == normalized
+        ),
+        None,
+    )
+    if association is None:
+        return False
+    association.tag.usage_count = max(0, association.tag.usage_count - 1)
+    place.place_tags.remove(association)
+    return True
 
 
 def replace_place_tags(session: Session, place: Place, tag_names: list[str]) -> None:

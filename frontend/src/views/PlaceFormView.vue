@@ -137,8 +137,13 @@ function buildFormData(allowDuplicate: boolean) {
 function validate() {
   if (!form.title.trim() || !form.description.trim()) return "장소명과 설명을 입력해 주세요.";
   if (form.latitude === null || form.longitude === null) return "장소의 위도와 경도를 입력해 주세요.";
+  if (!Number.isFinite(Number(form.latitude)) || !Number.isFinite(Number(form.longitude))) {
+    return "위도와 경도는 숫자로 입력해 주세요.";
+  }
+  if (Number(form.latitude) < 33 || Number(form.latitude) > 39.5) return "위도는 33~39.5 범위로 입력해 주세요.";
+  if (Number(form.longitude) < 124 || Number(form.longitude) > 132) return "경도는 124~132 범위로 입력해 주세요.";
   if (!form.password.trim()) return "수정과 삭제에 사용할 비밀번호를 입력해 주세요.";
-  if (parsedTags.value.some((tag) => tag.length > 30)) return "태그는 30자 이하여야 합니다.";
+  if (parsedTags.value.some((tag) => tag.length > 6)) return "태그는 6글자 이하여야 합니다.";
   return "";
 }
 
@@ -219,8 +224,8 @@ onBeforeUnmount(releasePreviews);
         <div class="location-helper"><span><MapPin :size="21" /><strong>지도에서 위치 선택</strong><small>주소를 검색하거나 지도 핀을 움직여 좌표를 지정하세요.</small></span></div>
         <MapLocationPicker :latitude="form.latitude" :longitude="form.longitude" :address="form.address" @select="selectLocation" />
         <div class="field-grid two-columns">
-          <label class="field-label">위도 *<input v-model.number="form.latitude" type="number" min="33" max="39.5" step="0.000001" placeholder="37.566500" required /></label>
-          <label class="field-label">경도 *<input v-model.number="form.longitude" type="number" min="124" max="132" step="0.000001" placeholder="126.978000" required /></label>
+          <label class="field-label">위도 *<input v-model.number="form.latitude" type="number" min="33" max="39.5" step="any" inputmode="decimal" placeholder="37.5665000" required /></label>
+          <label class="field-label">경도 *<input v-model.number="form.longitude" type="number" min="124" max="132" step="any" inputmode="decimal" placeholder="126.9780000" required /></label>
           <label class="field-label">주소<input v-model="form.address" type="text" maxlength="500" placeholder="서울특별시 ○○구 ○○로" /></label>
           <label class="field-label">상세 주소<input v-model="form.detailAddress" type="text" maxlength="500" placeholder="건물명, 층 등" /></label>
         </div>
@@ -236,7 +241,7 @@ onBeforeUnmount(releasePreviews);
           <div v-for="image in existingImages" :key="image.id" class="upload-preview"><img :src="mediaUrl(image.url) || ''" :alt="image.filename" /><button type="button" aria-label="기존 이미지 삭제" @click="removeExistingImage(image)"><Trash2 :size="16" /></button><span>등록됨</span></div>
           <div v-for="(preview, index) in previews" :key="preview.url" class="upload-preview"><img :src="preview.url" :alt="preview.file.name" /><button type="button" aria-label="선택 이미지 제거" @click="removeNewImage(index)"><X :size="17" /></button><span>새 이미지</span></div>
         </div>
-        <label class="field-label tag-input">태그<input v-model="tagsInput" type="text" placeholder="#숨은명소, #산책, #야경" /><small>쉼표나 띄어쓰기로 구분 · 최대 10개</small></label>
+        <label class="field-label tag-input">태그<input v-model="tagsInput" type="text" placeholder="#숨은명소, #산책, #야경" /><small>쉼표나 띄어쓰기로 구분 · 태그당 6글자 이하 · 최대 10개</small></label>
         <div v-if="parsedTags.length" class="tag-row form-tags"><span v-for="tag in parsedTags" :key="tag">#{{ tag }}</span></div>
       </section>
 

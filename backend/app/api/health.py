@@ -26,6 +26,9 @@ def health_check(
         "integrations": {
             "kakaoConfigured": bool(settings.kakao_rest_api_key),
             "pineconeConfigured": settings.pinecone_configured,
+            "lexicalPineconeConfigured": settings.pinecone_lexical_configured,
+            "emotionPineconeConfigured": settings.pinecone_emotion_configured,
+            "chatQueryPlanningEnabled": bool(settings.openai_api_key),
+            "chatSemanticSearchEnabled": settings.chat_semantic_search_enabled,
         },
     }
-

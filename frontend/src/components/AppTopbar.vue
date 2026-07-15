@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Compass, Search } from "lucide-vue-next";
+import { Bookmark, Compass, Search } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
@@ -18,16 +18,14 @@ function openSearch() {
     <nav class="desktop-nav" aria-label="주요 메뉴">
       <RouterLink to="/">장소 탐색</RouterLink>
       <RouterLink to="/emotions">마음 추천</RouterLink>
-      <RouterLink to="/bookmarks">저장한 장소</RouterLink>
-      <RouterLink to="/places/new">새 장소 등록</RouterLink>
     </nav>
     <div class="top-actions">
       <button class="icon-button" type="button" aria-label="검색" @click="openSearch">
         <Search :size="20" />
       </button>
-      <button class="icon-button muted-action" type="button" aria-label="알림, 준비 중" disabled>
-        <Bell :size="20" />
-      </button>
+      <RouterLink class="icon-button" to="/bookmarks" aria-label="저장한 장소">
+        <Bookmark :size="20" />
+      </RouterLink>
     </div>
   </header>
 </template>

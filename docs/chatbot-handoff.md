@@ -44,11 +44,13 @@
 
 ## 검색과 답변 흐름
 
-1. 질문에서 관광 카테고리, 서울 자치구, 커뮤니티 장소 여부와 검색어를 추출한다.
-2. `CHAT_SEMANTIC_SEARCH_ENABLED=true`이고 OpenAI 임베딩 및 Pinecone 장소 인덱스가 준비된 경우 Pinecone 의미 검색을 먼저 시도한다.
-3. 의미 검색을 사용할 수 없거나 결과가 없으면 SQLite에서 제목, 설명, 주소, 태그를 검색한다. 검색어가 없는 추천 질문은 좋아요와 조회 수가 높은 장소를 사용한다.
-4. 검색 결과 최대 5개만 `gpt-5-mini`에 전달한다.
-5. 모델은 전달된 장소만 근거로 답하고, 응답의 장소 ID도 검색 결과 안에서만 선택할 수 있다. 구조화 출력 검증이 실패하거나 OpenAI 호출이 실패하면 규칙 기반 안내문으로 대체한다.
+1. GPT-5 mini 질의 계획기와 서버 규칙이 질문을 관광 카테고리, 서울 자치구, 검색 명사와 고정 감정 선택지로 구조화한다.
+2. 일반 장소 질문은 자체 생성한 한국어 sparse vector로 `seoullo-lexical/places`를 우선 검색한다.
+3. 감정 질문은 기존 16차원 감정 Pinecone을 검색하고, 장소 키워드가 함께 있으면 lexical 결과와 RRF로 결합한다.
+4. Pinecone을 사용할 수 없으면 SQLite 키워드 검색 또는 동일한 16차원 코사인 유사도 계산으로 전환한다.
+5. `CHAT_SEMANTIC_SEARCH_ENABLED=true`이고 임베딩 권한이 있을 때만 기존 dense semantic 인덱스를 추가로 시도한다.
+6. 검색 결과 최대 5개만 `gpt-5-mini`에 전달한다.
+7. 모델은 전달된 장소만 근거로 답하고, 응답의 장소 ID도 검색 결과 안에서만 선택할 수 있다. 구조화 출력 검증이 실패하거나 OpenAI 호출이 실패하면 규칙 기반 안내문으로 대체한다.
 
 현재 데이터에는 축제의 개최일, 운영시간, 가격처럼 구조화되지 않은 값이 있으므로 모델 입력에서 일정은 명시적으로 `null` 처리한다. 따라서 챗봇은 해당 정보를 추측하지 않고 데이터에 없다고 안내해야 한다.
 
@@ -63,9 +65,13 @@ CHAT_SEMANTIC_SEARCH_ENABLED=false
 PINECONE_API_KEY=
 PINECONE_INDEX_NAME=seoullo
 PINECONE_PLACES_NAMESPACE=places
+PINECONE_LEXICAL_INDEX_NAME=seoullo-lexical
+PINECONE_LEXICAL_NAMESPACE=places
+PINECONE_EMOTION_INDEX_NAME=seoullo-emotions
+PINECONE_EMOTION_NAMESPACE=profiles
 ```
 
-현재 프로젝트 API 키는 채팅 모델은 사용할 수 있지만 임베딩 모델 권한이 없어 `CHAT_SEMANTIC_SEARCH_ENABLED=false`가 기본값이다. 임베딩 모델 권한을 받은 뒤 장소 벡터를 `seoullo/places` 네임스페이스에 다시 적재하고 값을 `true`로 변경하면 의미 검색이 활성화된다. 실패 시에도 SQLite 검색으로 자동 전환된다.
+현재 프로젝트 API 키는 채팅 모델은 사용할 수 있지만 임베딩 모델 권한이 없어 `CHAT_SEMANTIC_SEARCH_ENABLED=false`가 기본값이다. 일반 장소 검색은 이 설정과 무관하게 `seoullo-lexical/places`를 사용한다. 감정 질의는 `seoullo-emotions/profiles`의 16차원 Pinecone 벡터를 사용하며 실패 시 SQLite 계산으로 자동 전환된다.
 
 ## 담당 팀원 확장 지점
 

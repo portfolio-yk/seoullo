@@ -6,11 +6,17 @@ import logging
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
 from app.core.emotions import EMOTION_COLUMNS, EMOTION_VECTOR_DIMENSION, emotion_vector
-from app.db.models import Place, PlaceEmotionProfile
+from app.db.models import Place, PlaceEmotionProfile, PlaceTag
 from app.db.session import SessionLocal
+from app.services.lexical_vectors import (
+    FIELD_WEIGHTS,
+    MAX_SPARSE_VALUES,
+    place_lexical_record,
+)
 
 
 EMBEDDING_DIMENSION = 1536
@@ -24,6 +30,18 @@ class EmotionIndexReport:
     dimension: int
     upserted: int
     skipped_zero_vectors: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class LexicalIndexReport:
+    index_name: str
+    namespace: str
+    upserted: int
+    max_sparse_values: int
+    field_weights: dict[str, float]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -78,6 +96,84 @@ def _ensure_index(pinecone, *, name: str, dimension: int, settings: Settings):
                 f"Pinecone 인덱스 {name}의 차원은 {description.dimension}이며 필요한 차원은 {dimension}입니다."
             )
     return pinecone.Index(name)
+
+
+def _ensure_sparse_index(pinecone, *, name: str, settings: Settings):
+    from pinecone import ServerlessSpec
+
+    index_names = {item.name for item in pinecone.list_indexes()}
+    if name not in index_names:
+        pinecone.create_index(
+            name=name,
+            vector_type="sparse",
+            metric="dotproduct",
+            spec=ServerlessSpec(cloud=settings.pinecone_cloud, region=settings.pinecone_region),
+        )
+    else:
+        description = pinecone.describe_index(name)
+        vector_type = str(getattr(description, "vector_type", "")).lower()
+        metric = str(getattr(description, "metric", "")).lower()
+        if vector_type and "sparse" not in vector_type:
+            raise RuntimeError(f"Pinecone 인덱스 {name}은 sparse 인덱스가 아닙니다.")
+        if metric and "dotproduct" not in metric:
+            raise RuntimeError(f"Pinecone sparse 인덱스 {name}의 metric은 dotproduct여야 합니다.")
+    return pinecone.Index(name)
+
+
+def rebuild_lexical_index(settings: Settings) -> LexicalIndexReport:
+    if not settings.pinecone_lexical_configured:
+        raise RuntimeError("PINECONE_API_KEY가 필요합니다.")
+
+    from pinecone import Pinecone
+
+    pinecone = Pinecone(api_key=settings.pinecone_api_key)
+    index = _ensure_sparse_index(
+        pinecone,
+        name=settings.pinecone_lexical_index_name,
+        settings=settings,
+    )
+    try:
+        index.delete(delete_all=True, namespace=settings.pinecone_lexical_namespace)
+    except Exception:
+        pass
+
+    with SessionLocal() as session:
+        places = list(
+            session.scalars(
+                select(Place)
+                .options(selectinload(Place.place_tags).selectinload(PlaceTag.tag))
+                .order_by(Place.id)
+            ).unique()
+        )
+
+    records = [place_lexical_record(place) for place in places]
+    for batch in _chunks(records, 80):
+        index.upsert(vectors=batch, namespace=settings.pinecone_lexical_namespace)
+
+    return LexicalIndexReport(
+        index_name=settings.pinecone_lexical_index_name,
+        namespace=settings.pinecone_lexical_namespace,
+        upserted=len(records),
+        max_sparse_values=MAX_SPARSE_VALUES,
+        field_weights=dict(FIELD_WEIGHTS),
+    )
+
+
+def upsert_lexical_place(settings: Settings, place: Place) -> None:
+    if not settings.pinecone_lexical_configured:
+        raise RuntimeError("PINECONE_API_KEY가 필요합니다.")
+    from pinecone import Pinecone
+
+    pinecone = Pinecone(api_key=settings.pinecone_api_key)
+    index = _ensure_sparse_index(
+        pinecone,
+        name=settings.pinecone_lexical_index_name,
+        settings=settings,
+    )
+    index.upsert(
+        vectors=[place_lexical_record(place)],
+        namespace=settings.pinecone_lexical_namespace,
+    )
 
 
 def rebuild_places_namespace(settings: Settings) -> int:
@@ -259,7 +355,7 @@ def sync_place_vectors(
     place: Place,
     profile: PlaceEmotionProfile,
 ) -> bool:
-    """Always sync emotion vector; return whether semantic RAG embedding also synced."""
+    """Always sync emotion and lexical vectors; return whether semantic embedding also synced."""
     if not settings.pinecone_emotion_configured:
         raise RuntimeError("PINECONE_API_KEY가 필요합니다.")
     from openai import OpenAI, PermissionDeniedError
@@ -280,7 +376,17 @@ def sync_place_vectors(
         namespace=settings.pinecone_emotion_namespace,
     )
 
-    if not settings.openai_api_key:
+    lexical_index = _ensure_sparse_index(
+        pinecone,
+        name=settings.pinecone_lexical_index_name,
+        settings=settings,
+    )
+    lexical_index.upsert(
+        vectors=[place_lexical_record(place)],
+        namespace=settings.pinecone_lexical_namespace,
+    )
+
+    if not settings.chat_semantic_search_enabled or not settings.openai_api_key:
         return False
     try:
         openai_client = OpenAI(
@@ -319,6 +425,11 @@ def delete_place_vectors(settings: Settings, place_id: int) -> None:
         pinecone.Index(settings.pinecone_index_name).delete(
             ids=[f"place:{place_id}"],
             namespace=settings.pinecone_places_namespace,
+        )
+    if settings.pinecone_lexical_index_name in index_names:
+        pinecone.Index(settings.pinecone_lexical_index_name).delete(
+            ids=[f"place:{place_id}"],
+            namespace=settings.pinecone_lexical_namespace,
         )
     if settings.pinecone_emotion_index_name in index_names:
         pinecone.Index(settings.pinecone_emotion_index_name).delete(

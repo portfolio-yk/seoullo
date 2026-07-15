@@ -19,6 +19,7 @@
 5. 저장소 루트에서 `pnpm install`, `pnpm --filter seoullo-frontend dev`를 실행합니다.
 
 상세 명령과 환경변수는 각 하위 디렉터리의 README를 참고하세요.
+챗봇 검색·근거 검증·fallback 구조는 `docs/chatbot-integration.md`에 정리되어 있습니다.
 
 ## 데이터 출처
 

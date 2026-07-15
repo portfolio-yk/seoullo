@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import {
   ArrowLeft, Bookmark, ChevronRight, Edit3, Eye, Heart, Image, MapPin,
-  Navigation, Phone, Sparkles, Star, Trash2, ThumbsUp,
+  Navigation, Phone, Plus, Sparkles, Star, Trash2, ThumbsUp, X,
 } from "lucide-vue-next";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
-  createReview, deletePlace, deleteReview, errorMessage, getPlace, getReviews,
-  incrementPlaceView, mediaUrl, togglePlaceLike, toggleReviewLike, updateReview,
+  addPlaceTags, createReview, deletePlace, deletePlaceTag, deleteReview, errorMessage,
+  getPlace, getReviews, incrementPlaceView, mediaUrl, togglePlaceLike,
+  toggleReviewLike, updateReview,
 } from "../api/client";
 import BaseModal from "../components/BaseModal.vue";
 import { useBookmarks } from "../composables/useBookmarks";
@@ -37,6 +38,12 @@ const reviewModalOpen = ref(false);
 const reviewModalMode = ref<"edit" | "delete">("edit");
 const selectedReview = ref<Review | null>(null);
 const reviewEdit = reactive({ rating: 5, content: "", password: "" });
+const tagInput = ref("");
+const tagSubmitting = ref(false);
+const tagError = ref("");
+const tagDeleteOpen = ref(false);
+const tagToDelete = ref("");
+const tagDeletePassword = ref("");
 
 const gallery = computed(() => {
   if (!place.value) return [];
@@ -107,6 +114,54 @@ async function likePlace() {
     place.value.like_count = result.like_count;
   } catch (caught) { showNotice(errorMessage(caught)); }
   finally { likingPlace.value = false; }
+}
+
+function parsedTagInput(): string[] {
+  return [...new Set(
+    tagInput.value
+      .split(/[,\s]+/)
+      .map((value) => value.trim().replace(/^#/, ""))
+      .filter(Boolean),
+  )];
+}
+
+async function submitTags() {
+  if (!place.value || tagSubmitting.value) return;
+  const tags = parsedTagInput();
+  tagError.value = "";
+  if (!tags.length) { tagError.value = "추가할 태그를 입력해 주세요."; return; }
+  if (tags.some((tag) => tag.length > 6)) { tagError.value = "태그는 6글자 이하로 입력해 주세요."; return; }
+  tagSubmitting.value = true;
+  try {
+    place.value.tags = (await addPlaceTags(place.value.id, tags)).tags;
+    tagInput.value = "";
+    showNotice("태그를 추가했어요.");
+  } catch (caught) { tagError.value = errorMessage(caught); }
+  finally { tagSubmitting.value = false; }
+}
+
+function openTagDelete(tag: string) {
+  tagToDelete.value = tag;
+  tagDeletePassword.value = "";
+  actionError.value = "";
+  tagDeleteOpen.value = true;
+}
+
+async function confirmTagDelete() {
+  if (!place.value || !tagDeletePassword.value || tagSubmitting.value) {
+    actionError.value = "장소 등록 비밀번호를 입력해 주세요.";
+    return;
+  }
+  tagSubmitting.value = true;
+  actionError.value = "";
+  try {
+    place.value.tags = (
+      await deletePlaceTag(place.value.id, tagToDelete.value, tagDeletePassword.value)
+    ).tags;
+    tagDeleteOpen.value = false;
+    showNotice("태그를 삭제했어요.");
+  } catch (caught) { actionError.value = errorMessage(caught); }
+  finally { tagSubmitting.value = false; }
 }
 
 async function submitReview() {
@@ -212,7 +267,17 @@ onMounted(load);
             <span><Heart :size="18" :fill="place.liked_by_me ? 'currentColor' : 'none'" /><strong>{{ place.like_count.toLocaleString() }}</strong><small>좋아요</small></span>
             <span><Eye :size="18" /><strong>{{ place.view_count.toLocaleString() }}</strong><small>조회</small></span>
           </div>
-          <div v-if="place.tags.length" class="tag-row detail-tags"><span v-for="tag in place.tags" :key="tag">#{{ tag }}</span></div>
+          <div class="detail-tag-editor">
+            <div v-if="place.tags.length" class="tag-row detail-tags">
+              <span v-for="tag in place.tags" :key="tag">#{{ tag }}<button v-if="place.source === 'user'" type="button" :aria-label="`${tag} 태그 삭제`" @click="openTagDelete(tag)"><X :size="11" /></button></span>
+            </div>
+            <form class="tag-add-form" @submit.prevent="submitTags">
+              <input v-model="tagInput" type="text" maxlength="80" aria-label="장소 태그 추가" placeholder="#숨은명소, #산책" />
+              <button type="submit" :disabled="tagSubmitting"><Plus :size="15" />{{ tagSubmitting ? '추가 중' : '태그 추가' }}</button>
+            </form>
+            <small>쉼표나 띄어쓰기로 여러 개 입력 · 태그당 6글자 이하</small>
+            <p v-if="tagError" class="field-error">{{ tagError }}</p>
+          </div>
           <div class="detail-primary-actions">
             <button class="primary-button" :class="{ liked: place.liked_by_me }" type="button" :disabled="likingPlace" @click="likePlace"><Heart :size="18" :fill="place.liked_by_me ? 'currentColor' : 'none'" />{{ place.liked_by_me ? '좋아요 취소' : '좋아요' }}</button>
             <button class="secondary-button" :class="{ 'bookmark-active': bookmarked }" type="button" @click="toggleBookmark"><Bookmark :size="18" :fill="bookmarked ? 'currentColor' : 'none'" />{{ bookmarked ? '저장됨' : '저장' }}</button>
@@ -236,7 +301,7 @@ onMounted(load);
             <div class="star-picker" role="radiogroup" aria-label="별점"><button v-for="score in 5" :key="score" type="button" :class="{ active: score <= reviewForm.rating }" :aria-label="`${score}점`" @click="reviewForm.rating = score"><Star :size="25" :fill="score <= reviewForm.rating ? 'currentColor' : 'none'" /></button><strong>{{ reviewForm.rating }}점</strong></div>
             <label class="field-label">리뷰<textarea v-model="reviewForm.content" maxlength="1000" placeholder="이 장소에서의 경험을 들려주세요." required /></label>
             <div class="review-form-footer"><label class="field-label">수정·삭제 비밀번호<input v-model="reviewForm.password" type="password" maxlength="100" autocomplete="new-password" placeholder="비밀번호" required /></label><button class="primary-button" type="submit" :disabled="reviewSubmitting">{{ reviewSubmitting ? '등록 중…' : '리뷰 등록' }}</button></div>
-            <p v-if="reviewError" class="field-error">{{ reviewError }}</p><small class="review-policy">같은 장소에는 브라우저·네트워크 기준으로 리뷰 한 개만 작성할 수 있습니다.</small>
+            <p v-if="reviewError" class="field-error">{{ reviewError }}</p><small class="review-policy">리뷰는 한 개만 작성할 수 있습니다.</small>
           </form>
 
           <div v-if="reviewsLoading" class="review-loading">리뷰를 불러오는 중…</div>
@@ -259,6 +324,12 @@ onMounted(load);
       <p v-else class="modal-description">삭제한 리뷰는 복구할 수 없습니다.</p>
       <label class="field-label">등록 비밀번호<input v-model="reviewEdit.password" type="password" autocomplete="current-password" placeholder="비밀번호 입력" /></label><p v-if="actionError" class="field-error">{{ actionError }}</p>
       <template #footer><button class="secondary-button" type="button" @click="reviewModalOpen = false">취소</button><button :class="reviewModalMode === 'delete' ? 'danger-button' : 'primary-button'" type="button" :disabled="reviewSubmitting" @click="confirmReviewAction">{{ reviewModalMode === 'edit' ? '수정하기' : '삭제하기' }}</button></template>
+    </BaseModal>
+    <BaseModal :open="tagDeleteOpen" title="태그를 삭제할까요?" @close="tagDeleteOpen = false">
+      <p class="modal-description">#{{ tagToDelete }} 태그를 삭제하려면 장소 등록 비밀번호를 입력해 주세요.</p>
+      <label class="field-label">등록 비밀번호<input v-model="tagDeletePassword" type="password" autocomplete="current-password" placeholder="비밀번호 입력" /></label>
+      <p v-if="actionError" class="field-error">{{ actionError }}</p>
+      <template #footer><button class="secondary-button" type="button" @click="tagDeleteOpen = false">취소</button><button class="danger-button" type="button" :disabled="tagSubmitting" @click="confirmTagDelete">{{ tagSubmitting ? '삭제 중…' : '삭제하기' }}</button></template>
     </BaseModal>
     <Transition name="toast"><div v-if="notice" class="toast">{{ notice }}</div></Transition>
   </main>

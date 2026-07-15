@@ -35,10 +35,12 @@ class Settings(BaseSettings):
 
     pinecone_api_key: str = ""
     pinecone_index_name: str = "seoullo"
+    pinecone_lexical_index_name: str = "seoullo-lexical"
     pinecone_emotion_index_name: str = "seoullo-emotions"
     pinecone_cloud: str = "aws"
     pinecone_region: str = "us-east-1"
     pinecone_places_namespace: str = "places"
+    pinecone_lexical_namespace: str = "places"
     pinecone_checkins_namespace: str = "checkins"
     pinecone_community_namespace: str = "community"
     pinecone_emotion_namespace: str = "profiles"
@@ -67,6 +69,10 @@ class Settings(BaseSettings):
 
     @property
     def pinecone_emotion_configured(self) -> bool:
+        return bool(self.pinecone_api_key)
+
+    @property
+    def pinecone_lexical_configured(self) -> bool:
         return bool(self.pinecone_api_key)
 
 

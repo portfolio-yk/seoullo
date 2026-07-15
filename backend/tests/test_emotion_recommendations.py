@@ -67,6 +67,68 @@ def test_request_rejects_duplicate_keywords() -> None:
         )
 
 
+def test_user_created_place_is_included_in_pinecone_emotion_results(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(f"sqlite:///{(tmp_path / 'user-recommendation.db').as_posix()}")
+    Base.metadata.create_all(bind=engine)
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Place(
+                    content_id="dataset-low-match",
+                    source="dataset",
+                    region="서울",
+                    content_type="관광지",
+                    content_type_id="12",
+                    title="기존 장소",
+                    address="서울",
+                    longitude=126.9,
+                    latitude=37.5,
+                    emotion_profile=PlaceEmotionProfile(mood_excitement=5, after_excitement=5),
+                ),
+                Place(
+                    content_id=None,
+                    source="user",
+                    region="서울",
+                    content_type="관광지",
+                    content_type_id="12",
+                    title="사용자 회복 산책로",
+                    address="서울",
+                    longitude=127.0,
+                    latitude=37.6,
+                    password="password",
+                    emotion_profile=PlaceEmotionProfile(
+                        mood_fatigue=5,
+                        after_recovery=5,
+                        style_light_walk=5,
+                    ),
+                ),
+            ]
+        )
+        session.commit()
+        user_place = session.query(Place).filter(Place.source == "user").one()
+        dataset_place = session.query(Place).filter(Place.source == "dataset").one()
+        monkeypatch.setattr(
+            "app.services.emotion_recommendations._pinecone_matches",
+            lambda *_args, **_kwargs: [(user_place.id, 0.99), (dataset_place.id, 0.1)],
+        )
+        result = recommend_places(
+            session,
+            Settings(_env_file=None, pinecone_api_key="configured"),
+            EmotionRecommendationRequest(
+                mood=["지침"],
+                afterFeeling=["회복"],
+                style=["가볍게 산책"],
+            ),
+        )
+
+    assert result["algorithm"] == "pinecone_cosine"
+    assert result["items"][0]["place"]["source"] == "user"
+    assert result["items"][0]["place"]["title"] == "사용자 회복 산책로"
+
+
 def test_request_rejects_multiple_travel_styles() -> None:
     with pytest.raises(ValidationError):
         EmotionRecommendationRequest(

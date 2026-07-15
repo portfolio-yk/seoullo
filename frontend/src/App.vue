@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { RouterView } from "vue-router";
-import BottomNav from "./components/BottomNav.vue";
+import { Plus } from "lucide-vue-next";
+import { computed } from "vue";
+import { RouterLink, RouterView, useRoute } from "vue-router";
 import ChatWidget from "./components/ChatWidget.vue";
+
+const route = useRoute();
+const showCreateLauncher = computed(() => !["place-create", "place-edit"].includes(String(route.name)));
 </script>
 
 <template>
@@ -11,7 +15,9 @@ import ChatWidget from "./components/ChatWidget.vue";
         <component :is="Component" />
       </Transition>
     </RouterView>
+    <RouterLink v-if="showCreateLauncher" class="place-create-launcher" to="/places/new" aria-label="새 장소 등록" title="새 장소 등록">
+      <Plus :size="25" stroke-width="2.8" />
+    </RouterLink>
     <ChatWidget />
-    <BottomNav />
   </div>
 </template>

@@ -63,9 +63,17 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         "app.api.places.generate_place_emotion_values",
         lambda _settings, _context: {column: 3 for column in EMOTION_COLUMNS},
     )
+    lexical_syncs: list[tuple[int, list[str]]] = []
     monkeypatch.setattr("app.api.places.sync_place_vectors", lambda *_args: None)
+    monkeypatch.setattr(
+        "app.api.places.upsert_lexical_place",
+        lambda _settings, place: lexical_syncs.append(
+            (place.id, [association.tag.name for association in place.place_tags])
+        ),
+    )
     monkeypatch.setattr("app.api.places.delete_place_vectors", lambda *_args: None)
     app.state.testing_session = testing_session
+    app.state.lexical_syncs = lexical_syncs
     with TestClient(app) as test_client:
         yield test_client
 
@@ -230,6 +238,7 @@ def test_reviews_likes_views_and_counters(client: TestClient) -> None:
         json={"rating": 4, "content": "두 번째 리뷰", "password": "another"},
     )
     assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "장소당 리뷰를 하나만 작성할 수 있습니다. 기존 리뷰를 수정해 주세요."
 
     review_like = client.post(f"/api/reviews/{review_id}/like", headers=headers)
     assert review_like.json() == {"liked": True, "like_count": 1}
@@ -288,6 +297,63 @@ def test_popular_tags_and_id_filter(client: TestClient) -> None:
     filtered = client.get("/api/places", params={"ids": f"1,{place_id},9999", "size": 100})
     assert filtered.status_code == 200
     assert {item["id"] for item in filtered.json()["items"]} == {1, place_id}
+
+
+def test_any_place_accepts_tags_but_only_user_place_owner_can_delete(client: TestClient) -> None:
+    dataset_added = client.post(
+        "/api/places/1/tags",
+        json={"tags": ["#한적함", "산책"]},
+    )
+    assert dataset_added.status_code == 200, dataset_added.text
+    assert dataset_added.json()["tags"] == ["한적함", "산책"]
+    assert client.app.state.lexical_syncs[-1] == (1, ["한적함", "산책"])
+
+    too_long = client.post("/api/places/1/tags", json={"tags": ["일곱글자태그임"]})
+    assert too_long.status_code == 422
+    assert too_long.json()["detail"] == "태그는 6글자 이하여야 합니다."
+
+    dataset_delete = client.request(
+        "DELETE",
+        "/api/places/1/tags/산책",
+        json={"password": "anything"},
+    )
+    assert dataset_delete.status_code == 403
+
+    created = client.post(
+        "/api/places",
+        data={
+            "title": "사용자 태그 장소",
+            "content_type_id": "12",
+            "description": "태그 권한 테스트",
+            "latitude": "37.58",
+            "longitude": "127.02",
+            "password": "place-password",
+        },
+    )
+    assert created.status_code == 201, created.text
+    place_id = created.json()["id"]
+
+    user_added = client.post(
+        f"/api/places/{place_id}/tags",
+        json={"tags": ["야경", "데이트", "조용함"]},
+    )
+    assert user_added.status_code == 200
+    assert user_added.json()["tags"] == ["야경", "데이트", "조용함"]
+
+    wrong_password = client.request(
+        "DELETE",
+        f"/api/places/{place_id}/tags/데이트",
+        json={"password": "wrong"},
+    )
+    assert wrong_password.status_code == 403
+    deleted = client.request(
+        "DELETE",
+        f"/api/places/{place_id}/tags/데이트",
+        json={"password": "place-password"},
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["tags"] == ["야경", "조용함"]
+    assert client.app.state.lexical_syncs[-1] == (place_id, ["야경", "조용함"])
 
 
 def test_map_points_returns_more_than_list_page_limit(client: TestClient) -> None:

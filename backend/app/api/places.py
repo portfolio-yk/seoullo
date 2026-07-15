@@ -20,14 +20,20 @@ from app.schemas.place import (
     PlaceDetailResponse,
     PlaceListResponse,
     PlaceMapPointResponse,
+    PlaceTagsRequest,
+    PlaceTagsResponse,
 )
 from app.services.places import (
+    add_place_tags,
     append_images,
     find_duplicate_places,
     haversine_meters,
     image_url,
+    normalize_tags,
     parse_tags,
+    place_tags,
     read_uploaded_images,
+    remove_place_tag,
     replace_place_tags,
     require_user_place_password,
     serialize_place_detail,
@@ -40,7 +46,7 @@ from app.services.place_emotion_profiles import (
     place_emotion_context,
     replace_generated_profile,
 )
-from app.services.vector_store import delete_place_vectors, sync_place_vectors
+from app.services.vector_store import delete_place_vectors, sync_place_vectors, upsert_lexical_place
 
 router = APIRouter(prefix="/places", tags=["places"])
 
@@ -98,6 +104,22 @@ async def _refresh_user_place_profile(
         raise HTTPException(
             status_code=503,
             detail="장소 감정 벡터를 동기화하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
+
+
+async def _sync_place_tags(
+    session: Session,
+    settings: Settings,
+    place: Place,
+) -> None:
+    session.flush()
+    try:
+        await run_in_threadpool(upsert_lexical_place, settings, place)
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="태그 검색 벡터를 동기화하지 못했습니다. 잠시 후 다시 시도해 주세요.",
         ) from exc
 
 
@@ -404,6 +426,41 @@ async def get_place(
         )
     ) is not None
     return serialize_place_detail(place, liked_by_me=liked)
+
+
+@router.post("/{place_id}/tags", response_model=PlaceTagsResponse)
+async def add_tags_to_place(
+    place_id: int,
+    payload: PlaceTagsRequest,
+    session: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, list[str]]:
+    place = _get_place(session, place_id)
+    tag_names = normalize_tags(payload.tags)
+    changed = add_place_tags(session, place, tag_names)
+    if changed:
+        await _sync_place_tags(session, settings, place)
+        session.commit()
+    return {"tags": place_tags(place)}
+
+
+@router.delete("/{place_id}/tags/{tag_name}", response_model=PlaceTagsResponse)
+async def delete_tag_from_place(
+    place_id: int,
+    tag_name: str,
+    payload: PasswordRequest,
+    session: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, list[str]]:
+    place = _get_place(session, place_id)
+    if place.source == "dataset":
+        raise HTTPException(status_code=403, detail="기존 장소의 태그는 삭제할 수 없습니다.")
+    require_user_place_password(place, payload.password)
+    if not remove_place_tag(session, place, tag_name):
+        raise HTTPException(status_code=404, detail="삭제할 태그를 찾을 수 없습니다.")
+    await _sync_place_tags(session, settings, place)
+    session.commit()
+    return {"tags": place_tags(place)}
 
 
 @router.put("/{place_id}", response_model=PlaceDetailResponse)

@@ -94,7 +94,7 @@ def create_review(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="같은 브라우저에서는 장소당 리뷰를 하나만 작성할 수 있습니다. 기존 리뷰를 수정해 주세요.",
+            detail="장소당 리뷰를 하나만 작성할 수 있습니다. 기존 리뷰를 수정해 주세요.",
         )
     review = Review(
         place_id=place_id,
@@ -152,4 +152,3 @@ def delete_review(
     session.delete(review)
     session.commit()
     return {"deleted": True, "id": review_id}
-

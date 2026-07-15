@@ -128,6 +128,27 @@ export function getPopularTags(): Promise<PopularTag[]> {
   return request<PopularTag[]>("/api/tags/popular");
 }
 
+export function addPlaceTags(
+  placeId: number | string,
+  tags: string[],
+): Promise<{ tags: string[] }> {
+  return request<{ tags: string[] }>(`/api/places/${placeId}/tags`, {
+    method: "POST",
+    body: JSON.stringify({ tags }),
+  });
+}
+
+export function deletePlaceTag(
+  placeId: number | string,
+  tag: string,
+  password: string,
+): Promise<{ tags: string[] }> {
+  return request<{ tags: string[] }>(`/api/places/${placeId}/tags/${encodeURIComponent(tag)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ password }),
+  });
+}
+
 export function getReviews(
   placeId: number | string,
   sort: "latest" | "likes" | "rating" = "latest",

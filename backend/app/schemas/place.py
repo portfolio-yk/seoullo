@@ -105,6 +105,14 @@ class PasswordRequest(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class PlaceTagsRequest(BaseModel):
+    tags: list[str] = Field(min_length=1, max_length=10)
+
+
+class PlaceTagsResponse(BaseModel):
+    tags: list[str]
+
+
 class DeleteResponse(BaseModel):
     deleted: bool
     id: int

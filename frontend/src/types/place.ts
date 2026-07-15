@@ -216,16 +216,48 @@ export interface ChatHistoryMessage {
 
 export interface ChatSource {
   id: number;
+  content_id: string;
   title: string;
   content_type: string;
   address: string;
   image_url: string | null;
   source: PlaceSource;
+  source_type: "public_data" | "community_post";
+}
+
+export type ChatIntent =
+  | "place_recommendation"
+  | "emotion_recommendation"
+  | "festival_information"
+  | "location_information"
+  | "community_search"
+  | "general_information"
+  | "unknown";
+
+export interface ChatRecommendation {
+  id: number;
+  content_id: string;
+  title: string;
+  category: string;
+  address: string;
+  reason: string;
+  emotion_categories: string[];
 }
 
 export interface ChatResponse {
   answer: string;
-  retrieval_method: "pinecone_semantic" | "sqlite_keyword" | "sqlite_popular";
+  intent: ChatIntent;
+  retrieval_method:
+    | "pinecone_semantic"
+    | "pinecone_lexical"
+    | "pinecone_emotion"
+    | "pinecone_hybrid"
+    | "sqlite_emotion"
+    | "sqlite_keyword"
+    | "sqlite_popular"
+    | "none";
   answer_source: "openai" | "rule";
+  recommendations: ChatRecommendation[];
   sources: ChatSource[];
+  fallback: boolean;
 }
