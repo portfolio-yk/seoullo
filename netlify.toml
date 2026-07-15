@@ -1,5 +1,5 @@
 [build]
-    command = "pnpm --dir frontend build"
+    command = "pnpm run build:frontend"
     publish = "frontend/dist"
 
 [build.environment]

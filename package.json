@@ -1,0 +1,9 @@
+{
+  "name": "seoullo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build:frontend": "pnpm --dir frontend build"
+  }
+}
