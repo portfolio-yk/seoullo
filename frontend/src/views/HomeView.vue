@@ -48,9 +48,6 @@ async function loadPlaces(append = false) {
     places.value = append ? [...places.value, ...response.items] : response.items;
     total.value = response.total;
     totalPages.value = response.total_pages;
-    if (!append) {
-      router.replace({ query: search.value.trim() ? { q: search.value.trim() } : {} });
-    }
   } catch (caught) {
     error.value = errorMessage(caught);
   } finally {
@@ -59,25 +56,47 @@ async function loadPlaces(append = false) {
   }
 }
 
-function refresh() {
-  page.value = 1;
-  loadPlaces();
+async function syncSearchQuery() {
+  const q = search.value.trim();
+  const current = typeof route.query.q === "string" ? route.query.q : "";
+  const hasOnlyExpectedQuery = Object.keys(route.query).every((key) => key === "q");
+  if (current === q && hasOnlyExpectedQuery) return;
+  await router.replace({ name: "home", query: q ? { q } : {} });
 }
 
-function selectCategory(id: string) {
+async function refresh(syncQuery = true) {
+  page.value = 1;
+  await loadPlaces();
+  if (syncQuery) await syncSearchQuery();
+}
+
+async function clearSearchForBrowse() {
+  window.clearTimeout(debounceTimer);
+  search.value = "";
+  await syncSearchQuery();
+}
+
+async function selectCategory(id: string) {
+  await clearSearchForBrowse();
   selectedCategory.value = id;
-  refresh();
+  await refresh(false);
+}
+
+async function selectSource(source: "" | "dataset" | "user") {
+  await clearSearchForBrowse();
+  selectedSource.value = source;
+  await refresh(false);
 }
 
 function scheduleSearch() {
   window.clearTimeout(debounceTimer);
-  debounceTimer = window.setTimeout(refresh, 320);
+  debounceTimer = window.setTimeout(() => void refresh(), 320);
 }
 
-function choosePopularTag(tag: string) {
+async function choosePopularTag(tag: string) {
   search.value = `#${tag}`;
   searchFocused.value = false;
-  refresh();
+  await refresh();
 }
 
 function hidePopularTags() {
@@ -135,6 +154,17 @@ watch(
     if (value === "search") await nextTick(() => searchInput.value?.focus());
   },
 );
+
+watch(
+  () => route.query.q,
+  (value) => {
+    const nextSearch = typeof value === "string" ? value : "";
+    if (search.value === nextSearch) return;
+    window.clearTimeout(debounceTimer);
+    search.value = nextSearch;
+    void refresh(false);
+  },
+);
 </script>
 
 <template>
@@ -155,7 +185,7 @@ watch(
     </section>
 
     <section class="search-panel" aria-label="장소 검색">
-      <form class="search-field" @submit.prevent="refresh">
+      <form class="search-field" @submit.prevent="refresh()">
         <Search :size="20" />
         <input
           ref="searchInput"
@@ -211,9 +241,9 @@ watch(
         </div>
         <div class="toolbar-controls">
           <div class="source-segment" aria-label="장소 출처 필터">
-            <button :class="{ active: selectedSource === '' }" type="button" @click="selectedSource = ''; refresh()">전체</button>
-            <button :class="{ active: selectedSource === 'dataset' }" type="button" @click="selectedSource = 'dataset'; refresh()">공공데이터</button>
-            <button :class="{ active: selectedSource === 'user' }" type="button" @click="selectedSource = 'user'; refresh()">새 발견</button>
+            <button :class="{ active: selectedSource === '' }" type="button" @click="selectSource('')">전체</button>
+            <button :class="{ active: selectedSource === 'dataset' }" type="button" @click="selectSource('dataset')">공공데이터</button>
+            <button :class="{ active: selectedSource === 'user' }" type="button" @click="selectSource('user')">새 발견</button>
           </div>
           <label class="sort-select">
             <SlidersHorizontal :size="17" />
@@ -232,7 +262,7 @@ watch(
         <Frown :size="38" />
         <h3>장소를 불러오지 못했어요</h3>
         <p>{{ error }}</p>
-        <button class="primary-button" type="button" @click="refresh">다시 시도</button>
+        <button class="primary-button" type="button" @click="refresh()">다시 시도</button>
       </div>
       <div v-else-if="!places.length" class="state-card">
         <Search :size="38" />

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Bookmark, Compass, Search } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
+const route = useRoute();
 const router = useRouter();
 
 function openSearch() {
-  router.push({ name: "home", query: { focus: "search" } });
+  const q = route.name === "home" && typeof route.query.q === "string" ? route.query.q : undefined;
+  router.push({ name: "home", query: { ...(q ? { q } : {}), focus: "search" } });
 }
 </script>
 

@@ -3,7 +3,7 @@ import {
   ArrowLeft, Bookmark, ChevronRight, Edit3, Eye, Heart, Image, MapPin,
   Navigation, Phone, Plus, Sparkles, Star, Trash2, ThumbsUp, X,
 } from "lucide-vue-next";
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   addPlaceTags, createReview, deletePlace, deletePlaceTag, deleteReview, errorMessage,
@@ -44,6 +44,8 @@ const tagError = ref("");
 const tagDeleteOpen = ref(false);
 const tagToDelete = ref("");
 const tagDeletePassword = ref("");
+let loadSequence = 0;
+let reviewLoadSequence = 0;
 
 const gallery = computed(() => {
   if (!place.value) return [];
@@ -65,38 +67,79 @@ function showNotice(message: string) {
 
 async function recordViewOnce() {
   if (!place.value) return;
+  const placeId = place.value.id;
   const key = "seoullo-viewed-place-ids";
   let ids: number[] = [];
   try { ids = JSON.parse(localStorage.getItem(key) || "[]"); } catch { ids = []; }
-  if (ids.includes(place.value.id)) return;
+  if (ids.includes(placeId)) return;
   try {
-    const result = await incrementPlaceView(place.value.id);
-    place.value.view_count = result.view_count;
-    localStorage.setItem(key, JSON.stringify([...ids, place.value.id]));
+    const result = await incrementPlaceView(placeId);
+    if (place.value?.id === placeId) place.value.view_count = result.view_count;
+    localStorage.setItem(key, JSON.stringify([...ids, placeId]));
   } catch { /* 조회 기록 실패는 상세 열람을 막지 않는다. */ }
 }
 
 async function loadReviews() {
   if (!place.value) return;
+  const sequence = ++reviewLoadSequence;
+  const placeId = place.value.id;
+  const requestedSort = reviewSort.value;
   reviewsLoading.value = true;
-  try { reviews.value = (await getReviews(place.value.id, reviewSort.value)).items; }
-  catch (caught) { reviewError.value = errorMessage(caught); }
-  finally { reviewsLoading.value = false; }
+  reviewError.value = "";
+  try {
+    const response = await getReviews(placeId, requestedSort);
+    if (sequence === reviewLoadSequence && place.value?.id === placeId && reviewSort.value === requestedSort) {
+      reviews.value = response.items;
+    }
+  }
+  catch (caught) {
+    if (sequence === reviewLoadSequence) reviewError.value = errorMessage(caught);
+  }
+  finally {
+    if (sequence === reviewLoadSequence) reviewsLoading.value = false;
+  }
 }
 
 async function refreshPlace() {
-  place.value = await getPlace(props.id);
+  const requestedId = props.id;
+  const nextPlace = await getPlace(requestedId);
+  if (props.id === requestedId) place.value = nextPlace;
 }
 
 async function load() {
+  const sequence = ++loadSequence;
+  const requestedId = props.id;
   loading.value = true;
   error.value = "";
   try {
-    await refreshPlace();
+    const nextPlace = await getPlace(requestedId);
+    if (sequence !== loadSequence || props.id !== requestedId) return;
+    place.value = nextPlace;
     activeImage.value = gallery.value[0] || "";
     await Promise.all([loadReviews(), recordViewOnce()]);
-  } catch (caught) { error.value = errorMessage(caught); }
-  finally { loading.value = false; }
+  } catch (caught) {
+    if (sequence === loadSequence) error.value = errorMessage(caught);
+  }
+  finally {
+    if (sequence === loadSequence) loading.value = false;
+  }
+}
+
+function resetDetailState() {
+  reviewLoadSequence += 1;
+  place.value = null;
+  reviews.value = [];
+  activeImage.value = "";
+  imageFailed.value = false;
+  error.value = "";
+  actionError.value = "";
+  reviewError.value = "";
+  tagError.value = "";
+  deleteOpen.value = false;
+  reviewModalOpen.value = false;
+  tagDeleteOpen.value = false;
+  selectedReview.value = null;
+  tagInput.value = "";
 }
 
 function toggleBookmark() {
@@ -233,7 +276,15 @@ function formatDate(value: string) {
 
 function openMap() { router.push({ name: "map", query: { placeId: props.id } }); }
 watch(reviewSort, loadReviews);
-onMounted(load);
+watch(
+  () => props.id,
+  () => {
+    resetDetailState();
+    window.scrollTo({ top: 0, behavior: "auto" });
+    void load();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
