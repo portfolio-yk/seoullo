@@ -209,6 +209,7 @@ pnpm --dir frontend dev
 - [API 명세](docs/api.md)
 - [DDL 정의서](docs/ddl-definition.md)
 - [Netlify·Render 배포 가이드](docs/deployment.md)
+- [프로젝트 발표자료](docs/서울로_발표자료.pdf)
 
 ## 검증 명령
 
