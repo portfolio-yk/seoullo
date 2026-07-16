@@ -1,10 +1,12 @@
 import argparse
+import asyncio
 import json
 
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services.seed import seed_dataset
+from app.services.travel_course_addresses import enrich_travel_course_addresses
 from app.services.vector_store import (
     rebuild_emotion_index,
     rebuild_lexical_index,
@@ -43,6 +45,17 @@ def main() -> None:
         with SessionLocal() as session:
             report = seed_dataset(session, settings.data_directory)
         print(json.dumps({"sqlite": report.to_dict()}, ensure_ascii=False, indent=2))
+
+    if not args.emotion_only:
+        with SessionLocal() as session:
+            address_report = asyncio.run(enrich_travel_course_addresses(session, settings))
+        print(
+            json.dumps(
+                {"travel_course_addresses": address_report.to_dict()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
 
     if not args.lexical_only and not args.semantic_only:
         if report and (report.missing_emotion_items or report.invalid_emotion_items):

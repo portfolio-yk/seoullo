@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,8 +15,10 @@ from app.api.tags import router as tags_router
 from app.core.config import get_settings
 from app.db.session import SessionLocal, init_db
 from app.services.seed import seed_dataset
+from app.services.travel_course_addresses import enrich_travel_course_addresses
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -25,6 +28,11 @@ async def lifespan(_app: FastAPI):
         # Always run the idempotent loader so newly added category files are
         # discovered without requiring a manual database reset.
         seed_dataset(session, settings.data_directory)
+        try:
+            report = await enrich_travel_course_addresses(session, settings)
+            logger.info("여행코스 주소 보강 결과: %s", report.to_dict())
+        except Exception:
+            logger.exception("여행코스 주소 보강 중 오류가 발생했지만 서버 시작을 계속합니다.")
     yield
 
 

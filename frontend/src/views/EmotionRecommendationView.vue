@@ -100,7 +100,7 @@ function groupLabel(group: string) {
     </section>
 
     <section v-else class="emotion-results-shell">
-      <div class="emotion-results-heading"><span class="section-eyebrow">YOUR SEOUL</span><h1>지금 마음에 가까운<br />서울 5곳이에요</h1><p>AI가 아닌 16차원 감정 유사도로 계산한 결과입니다.</p><div class="emotion-query-tags"><span v-for="keyword in [...selected.mood, ...selected.afterFeeling, ...selected.style]" :key="keyword">#{{ keyword }}</span></div></div>
+      <div class="emotion-results-heading"><span class="section-eyebrow">YOUR SEOUL</span><h1>지금 마음에 가까운<br />서울 5곳이에요</h1><div class="emotion-query-tags"><span v-for="keyword in [...selected.mood, ...selected.afterFeeling, ...selected.style]" :key="keyword">#{{ keyword }}</span></div></div>
       <div class="emotion-result-list">
         <article v-for="item in result.items" :key="item.place.id" class="emotion-result-card">
           <RouterLink :to="`/places/${item.place.id}`" class="emotion-result-main">

@@ -48,7 +48,9 @@ async function loadPlaces(append = false) {
     places.value = append ? [...places.value, ...response.items] : response.items;
     total.value = response.total;
     totalPages.value = response.total_pages;
-    router.replace({ query: search.value.trim() ? { q: search.value.trim() } : {} });
+    if (!append) {
+      router.replace({ query: search.value.trim() ? { q: search.value.trim() } : {} });
+    }
   } catch (caught) {
     error.value = errorMessage(caught);
   } finally {
@@ -171,7 +173,7 @@ watch(
         <aside v-if="searchFocused && !search.trim()" class="popular-tag-popover">
           <div><strong>지금 인기 있는 태그</strong><small>Seoullo 사용자가 많이 등록한 태그예요.</small></div>
           <div v-if="popularTags.length" class="popular-tag-list">
-            <button v-for="tag in popularTags" :key="tag.name" type="button" @mousedown.prevent="choosePopularTag(tag.name)">#{{ tag.name }}<span>{{ tag.usage_count }}</span></button>
+            <button v-for="tag in popularTags" :key="tag.name" type="button" @mousedown.prevent="choosePopularTag(tag.name)">#{{ tag.name }}</button>
           </div>
           <p v-else>새 장소가 등록되면 인기 태그가 여기에 표시됩니다.</p>
         </aside>

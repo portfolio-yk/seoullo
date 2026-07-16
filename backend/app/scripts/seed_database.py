@@ -1,10 +1,12 @@
 import argparse
+import asyncio
 import json
 
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services.seed import seed_dataset
+from app.services.travel_course_addresses import enrich_travel_course_addresses
 
 
 def main() -> None:
@@ -19,9 +21,15 @@ def main() -> None:
 
     with SessionLocal() as session:
         report = seed_dataset(session, settings.data_directory)
-    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        address_report = asyncio.run(enrich_travel_course_addresses(session, settings))
+    print(
+        json.dumps(
+            {"sqlite": report.to_dict(), "travel_course_addresses": address_report.to_dict()},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,28 +1,48 @@
 # Seoullo Backend
 
-## 로컬 실행
+FastAPI, SQLAlchemy, SQLite로 구성된 Seoullo API 서버입니다.
 
-```bash
+## 실행
+
+프로젝트 루트의 `.env`를 읽습니다.
+
+```powershell
+cd backend
 python -m venv .venv
-.venv/Scripts/activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-python -m app.scripts.seed_database --reset
 uvicorn app.main:app --reload
 ```
 
-Linux/macOS에서는 활성화 명령으로 `source .venv/bin/activate`를 사용합니다.
+서버 시작 시 다음 작업을 수행합니다.
 
-## 주요 명령
+1. SQLite 테이블 생성과 호환성 마이그레이션
+2. `data/서울/서울_*.json` 중복 안전 적재
+3. 주소가 비어 있는 여행코스의 Kakao 역지오코딩 및 DB 저장
 
-- 초기 DB 생성: `python -m app.scripts.seed_database --reset`
-- 데이터 검증: `python -m app.scripts.validate_data`
-- Pinecone 전체 재구축: `python -m app.scripts.rebuild_pinecone`
-- 임베딩 없는 장소 lexical 인덱스만 재구축: `python -m app.scripts.rebuild_pinecone --skip-db-reset --lexical-only`
-- 16차원 감정 인덱스만 재구축: `python -m app.scripts.rebuild_pinecone --skip-db-reset --emotion-only`
-- OpenAI 임베딩 장소 인덱스만 재구축: `python -m app.scripts.rebuild_pinecone --skip-db-reset --semantic-only`
-- 테스트: `pytest`
+Kakao 주소 보강 실패는 서버 시작을 중단하지 않으며 다음 시작 때 다시 시도합니다.
 
-장소 API 요청 형식은 `../docs/place-api.md`에 정리되어 있습니다.
+## 관리 명령
 
-기본 재구축은 `PINECONE_API_KEY`만으로 lexical·감정 인덱스를 생성합니다. `OPENAI_API_KEY`와
-임베딩 모델 권한은 `--semantic-only` 또는 `CHAT_SEMANTIC_SEARCH_ENABLED=true`인 경우에만 필요합니다.
+```powershell
+# DB를 비우고 원본 데이터 재적재
+python -m app.scripts.seed_database --reset
+
+# 원본 데이터 검증
+python -m app.scripts.validate_data
+
+# DB 재적재 후 lexical·emotion Pinecone 인덱스 재구축
+python -m app.scripts.rebuild_pinecone
+
+# DB를 유지한 채 인덱스별 재구축
+python -m app.scripts.rebuild_pinecone --skip-db-reset --lexical-only
+python -m app.scripts.rebuild_pinecone --skip-db-reset --emotion-only
+
+# OpenAI 임베딩 권한이 있을 때만 사용하는 선택 기능
+python -m app.scripts.rebuild_pinecone --skip-db-reset --semantic-only
+
+# 테스트
+pytest
+```
+
+기본 챗봇 검색은 OpenAI 임베딩 없이 lexical·emotion 인덱스를 사용합니다. 전체 설정과 동기화 규칙은 [아키텍처 문서](../docs/architecture.md), 엔드포인트는 [API 명세](../docs/api.md)를 참고하세요.

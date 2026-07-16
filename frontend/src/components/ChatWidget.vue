@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { nextTick, ref } from "vue";
 import {
   ChevronRight,
   LoaderCircle,
@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-vue-next";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink } from "vue-router";
 import { errorMessage, mediaUrl, sendChatMessage } from "../api/client";
 import type { ChatHistoryMessage, ChatRecommendation, ChatSource } from "../types/place";
 
@@ -30,8 +30,6 @@ const draft = ref("");
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const messageList = ref<HTMLElement | null>(null);
 const messages = ref<UiMessage[]>([{ role: "assistant", content: greeting, isGreeting: true }]);
-const route = useRoute();
-const hideLauncher = computed(() => ["place-create", "place-edit"].includes(String(route.name)));
 
 async function scrollToLatest() {
   await nextTick();
@@ -97,7 +95,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 <template>
   <button
-    v-if="!isOpen && !hideLauncher"
+    v-if="!isOpen"
     class="chat-launcher"
     type="button"
     aria-label="Seoullo 여행 챗봇 열기"

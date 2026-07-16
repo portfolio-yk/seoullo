@@ -1,19 +1,38 @@
 # Seoullo Frontend
 
+Vue 3, Vite, TypeScript 기반의 모바일 우선 SPA입니다.
+
+## 실행과 빌드
+
 저장소 루트에서 실행합니다.
 
-```bash
+```powershell
 pnpm install
-pnpm --filter seoullo-frontend dev
+pnpm --dir frontend dev
+pnpm --dir frontend build
 ```
 
-환경변수는 `VITE_API_BASE_URL`, `VITE_KAKAO_JAVASCRIPT_KEY`를 사용합니다. 로컬 개발에서는 Vite가 `/api` 요청을 `http://localhost:8000`으로 프록시합니다.
+로컬 개발 시 `/api` 요청은 기본적으로 `http://localhost:8000`으로 프록시됩니다.
 
-## 화면 경로
+## 환경 변수
 
-- `/`: 장소 검색·카테고리·정렬·목록
-- `/places/:id`: 장소 상세
-- `/places/new`: 사용자 장소 등록
-- `/places/:id/edit`: 사용자 장소 수정
+| 변수 | 용도 |
+|---|---|
+| `VITE_API_BASE_URL` | 배포된 Backend origin. 예: `https://seoullo-api.onrender.com` |
+| `VITE_KAKAO_JAVASCRIPT_KEY` | Kakao 지도 JavaScript 키 |
+| `VITE_API_PROXY_TARGET` | 로컬 Vite 프록시 대상. 기본값 `http://localhost:8000` |
 
-모바일에서는 하단 내비게이션을 사용하며 820px 이상에서는 데스크톱 상단 내비게이션과 다열 카드 레이아웃으로 전환됩니다.
+## 주요 경로
+
+| 경로 | 화면 |
+|---|---|
+| `/` | 장소 검색·목록 |
+| `/places/:id` | 장소 상세, 리뷰, 태그 |
+| `/places/new` | 사용자 장소 등록 |
+| `/places/:id/edit` | 사용자 장소 수정 |
+| `/map` | 현재 위치와 장소 지도 |
+| `/emotions` | 감정 기반 장소 추천 |
+| `/places/:id/checkin` | 선택한 장소의 여행 후 감정 체크인 |
+| `/bookmarks` | 로컬 북마크 목록 |
+
+챗봇과 새 장소 등록 플로팅 버튼은 메인과 장소 상세 화면에서만 표시됩니다. Netlify 설정은 [배포 가이드](../docs/deployment.md)를 참고하세요.

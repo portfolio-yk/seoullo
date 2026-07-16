@@ -5,7 +5,7 @@ import { RouterLink, RouterView, useRoute } from "vue-router";
 import ChatWidget from "./components/ChatWidget.vue";
 
 const route = useRoute();
-const showCreateLauncher = computed(() => !["place-create", "place-edit"].includes(String(route.name)));
+const showLaunchers = computed(() => ["home", "place-detail"].includes(String(route.name)));
 </script>
 
 <template>
@@ -15,9 +15,9 @@ const showCreateLauncher = computed(() => !["place-create", "place-edit"].includ
         <component :is="Component" />
       </Transition>
     </RouterView>
-    <RouterLink v-if="showCreateLauncher" class="place-create-launcher" to="/places/new" aria-label="새 장소 등록" title="새 장소 등록">
+    <RouterLink v-if="showLaunchers" class="place-create-launcher" to="/places/new" aria-label="새 장소 등록" title="새 장소 등록">
       <Plus :size="25" stroke-width="2.8" />
     </RouterLink>
-    <ChatWidget />
+    <ChatWidget v-if="showLaunchers" />
   </div>
 </template>

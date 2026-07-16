@@ -18,3 +18,4 @@ backend/uploads/
 !.gitkeep
 .agents/
 .idea/
+.pnpm-store/
